@@ -5,6 +5,7 @@ Created on 23/10/17
 
 @author: Maurizio Ferrari Dacrema
 """
+import sys
 
 from Recommenders.Recommender_utils import check_matrix
 from Recommenders.BaseSimilarityMatrixRecommender import BaseItemSimilarityMatrixRecommender

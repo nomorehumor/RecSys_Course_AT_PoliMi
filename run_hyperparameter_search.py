@@ -5,6 +5,7 @@ Created on 22/11/17
 
 @author: Maurizio Ferrari Dacrema
 """
+import sys
 
 from Recommenders.Recommender_import_list import *
 
@@ -13,12 +14,13 @@ import traceback
 import os, multiprocessing
 from functools import partial
 
-
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 
 from Data_manager.Movielens.Movielens1MReader import Movielens1MReader
 from Data_manager.split_functions.split_train_validation_random_holdout import split_train_in_two_percentage_global_sample
 
 from HyperparameterTuning.run_hyperparameter_search import runHyperparameterSearch_Collaborative, runHyperparameterSearch_Content, runHyperparameterSearch_Hybrid
+from bore.data.util import read_train_urm
 
 
 def read_data_split_and_search():
@@ -35,10 +37,11 @@ def read_data_split_and_search():
 
 
 
-    dataReader = Movielens1MReader()
-    dataset = dataReader.load_data()
+    # dataReader = Movielens1MReader()
+    # dataset = dataReader.load_data()
+    dataset = read_train_urm("../data_train.csv")
 
-    URM_train, URM_test = split_train_in_two_percentage_global_sample(dataset.get_URM_all(), train_percentage = 0.80)
+    URM_train, URM_test = split_train_in_two_percentage_global_sample(dataset, train_percentage = 0.80)
     URM_train, URM_validation = split_train_in_two_percentage_global_sample(URM_train, train_percentage = 0.80)
 
     output_folder_path = "result_experiments/"
@@ -50,17 +53,17 @@ def read_data_split_and_search():
 
 
     collaborative_algorithm_list = [
-        Random,
-        TopPop,
+        # Random,
+        # TopPop,
         P3alphaRecommender,
         RP3betaRecommender,
         ItemKNNCFRecommender,
         UserKNNCFRecommender,
-        MatrixFactorization_BPR_Cython,
-        MatrixFactorization_FunkSVD_Cython,
+        # MatrixFactorization_BPR_Cython,
+        # MatrixFactorization_FunkSVD_Cython,
         PureSVDRecommender,
-        SLIM_BPR_Cython,
-        SLIMElasticNetRecommender
+        # SLIM_BPR_Cython,
+        # SLIMElasticNetRecommender
     ]
 
 
