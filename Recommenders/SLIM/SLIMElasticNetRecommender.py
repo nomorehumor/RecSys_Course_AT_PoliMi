@@ -212,7 +212,7 @@ class MultiThreadSLIM_SLIMElasticNetRecommender(SLIMElasticNetRecommender):
         self.positive_only = positive_only
         self.topK = topK
 
-        self.workers = workers
+        self.workers = max(workers, 1)
 
         self.URM_train = check_matrix(self.URM_train, 'csc', dtype=np.float32)
 

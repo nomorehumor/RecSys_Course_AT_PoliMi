@@ -1089,8 +1089,79 @@ def runHyperparameterSearch_Collaborative(recommender_class, URM_train, URM_trai
 
 
 
+from typing import Union, Tuple, List
 
+import numpy as np
+import pandas as pd
+import scipy.sparse as sp
 
+from Data_manager.split_functions.split_train_validation_random_holdout import split_train_in_two_percentage_global_sample
+def read_user_ratings(path: str):
+    """
+    Read the user ratings from a csv file and return them as a pandas dataframe.
+    :param path: path to the URM csv file
+    :return: dataframe with user ratings
+    """
+    # train data expected as csv with columns user_id,item_id,data
+    df = pd.read_csv(
+        filepath_or_buffer=path,
+        names=["user_id", "item_id", "data"],
+        dtype={
+            "user_id": np.int32,
+            "item_id": np.int32,
+            "data": np.int32,
+        },
+        header=0
+    )
+
+    return df
+
+def preprocess_urm_data(ratings: pd.DataFrame) -> pd.DataFrame:
+    """
+    Map the user and item IDs to a contiguous unique range of new IDs
+    The new IDs will be stored in "mapped_user_id" and "mapped_item_id" columns
+    :param ratings: urm dataframe
+    :return: preprocessed urm dataframe
+    """
+    unique_users = np.sort(ratings.user_id.unique())
+    unique_items = np.sort(ratings.item_id.unique())
+
+    num_users, min_user_id, max_user_id = unique_users.size, unique_users.min(), unique_users.max()
+    num_items, min_item_id, max_item_id = unique_items.size, unique_items.min(), unique_items.max()
+
+    mapping_user_id = pd.DataFrame({"mapped_user_id": np.arange(num_users), "user_id": unique_users})
+    mapping_item_id = pd.DataFrame({"mapped_item_id": np.arange(num_items), "item_id": unique_items})
+
+    ratings = pd.merge(left=ratings,
+                       right=mapping_user_id,
+                       how="inner",
+                       on="user_id")
+
+    ratings = pd.merge(left=ratings,
+                       right=mapping_item_id,
+                       how="inner",
+                       on="item_id")
+
+    return ratings
+
+def read_train_urm(train_data_path, return_ratings=False) -> Union[sp.csr_matrix, Tuple[sp.csr_matrix, pd.DataFrame]]:
+    """
+    Read the URM data of the whole provided dataset and return it as a sparse matrix (CSR).
+    :param return_ratings: whether to return the ratings dataframe as well
+    :param train_data_path: path to URM csv data
+    :return: CSR matrix of the URM data
+    """
+    raw_ratings = read_user_ratings(train_data_path)
+    ratings = preprocess_urm_data(raw_ratings)
+
+    num_users, num_items = ratings.mapped_user_id.unique().size, ratings.mapped_item_id.unique().size
+    urm = sp.csr_matrix((ratings.data, (ratings.mapped_user_id, ratings.mapped_item_id)),
+                        shape=(num_users, num_items))
+
+    if return_ratings:
+        return urm, ratings
+
+    return urm
 
 
 
@@ -1107,17 +1178,23 @@ def read_data_split_and_search():
         - A _best_result_test file which contains a dictionary with the results, on the test set, of the best solution chosen using the validation set
     """
 
-    from Data_manager.Movielens.Movielens1MReader import Movielens1MReader
-    from Data_manager.DataSplitter_Holdout import DataSplitter_Holdout
+    # from Data_manager.Movielens.Movielens1MReader import Movielens1MReader
+    # from Data_manager.DataSplitter_Holdout import DataSplitter_Holdout
 
 
-    dataset_reader = Movielens1MReader()
+    # dataset_reader = Movielens1MReader()
     output_folder_path = "result_experiments/SKOPT_test/"
 
-    dataSplitter = DataSplitter_Holdout(dataset_reader, user_wise = False, split_interaction_quota_list=[80, 10, 10])
-    dataSplitter.load_data(save_folder_path=output_folder_path + "data/")
+    # dataSplitter = DataSplitter_Holdout(dataset_reader, user_wise = False, split_interaction_quota_list=[80, 10, 10])
+    # dataSplitter.load_data(save_folder_path=output_folder_path + "data/")
 
-    URM_train, URM_validation, URM_test = dataSplitter.get_holdout_split()
+    # URM_train, URM_validation, URM_test = dataSplitter.get_holdout_split()
+    urm_path = 'data_train.csv'
+    URM_all = read_train_urm(urm_path)
+    from Evaluation.Evaluator import EvaluatorHoldout
+
+    URM_train_validation, URM_test = split_train_in_two_percentage_global_sample(URM_all, train_percentage = 0.8)
+    URM_train, URM_validation = split_train_in_two_percentage_global_sample(URM_train_validation, train_percentage = 0.8)
 
 
     # If directory does not exist, create
@@ -1126,17 +1203,18 @@ def read_data_split_and_search():
 
 
     collaborative_algorithm_list = [
-        Random,
-        TopPop,
-        P3alphaRecommender,
-        RP3betaRecommender,
-        ItemKNNCFRecommender,
-        UserKNNCFRecommender,
+        # Random,
+        # TopPop,
+        # P3alphaRecommender,
+        # RP3betaRecommender,
+        # ItemKNNCFRecommender,
+        # UserKNNCFRecommender,
         # MatrixFactorization_BPR_Cython,
         # MatrixFactorization_FunkSVD_Cython,
         # PureSVDRecommender,
         # SLIM_BPR_Cython,
-        # SLIMElasticNetRecommender
+        # SLIMElasticNetRecommender,
+        MultiThreadSLIM_SLIMElasticNetRecommender,
     ]
 
 
@@ -1146,11 +1224,13 @@ def read_data_split_and_search():
     evaluator_validation = EvaluatorHoldout(URM_validation, cutoff_list=[5])
     evaluator_test = EvaluatorHoldout(URM_test, cutoff_list=[5, 10])
 
-
+    n_cases = 50
+    n_random_starts = n_cases * 0.3
     runHyperparameterSearch_Collaborative_partial = partial(runHyperparameterSearch_Collaborative,
                                                        URM_train = URM_train,
                                                        metric_to_optimize = "MAP",
-                                                       n_cases = 8,
+                                                       n_cases = n_cases,
+                                                       n_random_starts = n_random_starts,
                                                        evaluator_validation_earlystopping = evaluator_validation,
                                                        evaluator_validation = evaluator_validation,
                                                        evaluator_test = evaluator_test,
